@@ -1,0 +1,227 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="glass panel">
+  <h2 style="margin-top:0">Kash AI</h2>
+  <p style="margin:6px 0 12px;color:#667;">Chat with the planner. It can reference your tasks and saved schedules to help plan your day.</p>
+
+  <!-- Quick Action Buttons -->
+  <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+    <button class="btn quick-action" data-prompt="Generate a plan for today">📅 Plan Today</button>
+    <button class="btn quick-action" data-prompt="What tasks should I prioritize this morning?">🌅 Morning Focus</button>
+    <button class="btn quick-action" data-prompt="Reschedule around my meetings">📞 Work Around Meetings</button>
+    <button class="btn quick-action" data-prompt="Show me high energy tasks for tomorrow">⚡ High Energy Tasks</button>
+  </div>
+
+  <div id="chatBox" style="border:1px solid var(--border); border-radius:10px; padding:10px; background:var(--surface-2);">
+    <div id="chatMessages" style="display:flex; flex-direction:column; gap:8px; height:400px; min-height:400px; overflow:auto;">
+      <div class="chat-msg assistant">Hi! I can help plan using your tasks and saved schedules. Use the quick actions above or ask me anything custom.</div>
+    </div>
+    <div style="display:flex; gap:8px; margin-top:10px;">
+      <input id="chatInput" class="input" type="text" placeholder="Type a message or use quick actions above…" style="flex:1;" />
+      <button id="sendBtn" class="btn btn-primary" type="button">Send</button>
+    </div>
+    <style>
+      .chat-msg { padding:10px; border-radius:10px; line-height:1.4; }
+      .chat-msg.assistant { background:#eef6ff; border:1px solid var(--border); }
+      .chat-msg.user { background:#f7ecff; border:1px solid var(--border); align-self:flex-end; }
+      .chat-msg.error { background:#ffecec; border:1px solid #f5b0b0; }
+      .quick-action { font-size:0.9em; padding:6px 12px; }
+      .quick-action:hover { background:var(--accent); color:white; }
+      .streaming { opacity:0.7; }
+      /* Formatted schedule styles */
+      .schedule-list { display:flex; flex-direction:column; gap:6px; }
+      .schedule-item { display:flex; gap:8px; align-items:flex-start; padding:8px; border:1px dashed var(--border); border-radius:8px; background:#fff; }
+      .schedule-time { font-weight:600; color:var(--accent); min-width:96px; }
+      .schedule-title { flex:1; }
+    </style>
+  </div>
+
+  <!-- Apply Plan Section (hidden by default) -->
+  <div id="applyPlanSection" style="display:none; margin-top:12px; padding:12px; border:1px solid var(--accent); border-radius:8px; background:rgba(100,210,255,0.05);">
+    <h4 style="margin:0 0 8px; color:var(--accent);">Apply This Plan</h4>
+    <p style="margin:0 0 8px; font-size:0.9em; color:#667;">Select a date to create a schedule from the suggested plan:</p>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <input type="date" id="planDate" style="padding:6px; border:1px solid var(--border); border-radius:4px;" />
+      <button id="applyPlanBtn" class="btn btn-primary">Create Schedule</button>
+      <button id="cancelPlanBtn" class="btn">Cancel</button>
+    </div>
+  </div>
+
+  <script>
+  (function(){
+    const msgs = document.getElementById('chatMessages');
+    const input = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const applySection = document.getElementById('applyPlanSection');
+    const planDate = document.getElementById('planDate');
+    const applyBtn = document.getElementById('applyPlanBtn');
+    const cancelBtn = document.getElementById('cancelPlanBtn');
+    let lastAssistantMessage = null;
+
+    function getCookie(name){ const val = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)'); return val ? val.pop() : ''; }
+    
+    function addMsg(text, role, streaming = false){ 
+      const d = document.createElement('div'); 
+      d.className = 'chat-msg ' + role + (streaming ? ' streaming' : ''); 
+      d.textContent = text; 
+      msgs.appendChild(d); 
+      msgs.scrollTop = msgs.scrollHeight; 
+      if(role === 'assistant') lastAssistantMessage = d;
+      return d;
+    }
+
+    function updateMsg(element, text, streaming = false){
+      element.textContent = text;
+      element.className = element.className.replace(' streaming', '') + (streaming ? ' streaming' : '');
+      msgs.scrollTop = msgs.scrollHeight;
+    }
+
+    function escapeHTML(str){
+      return str.replace(/[&<>"]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]); });
+    }
+
+    // Format assistant reply: detect schedule lines like "- 09:00-10:00 Task"
+    function formatAssistantReply(targetEl, text){
+      const lines = text.split(/\r?\n/);
+      const container = document.createElement('div');
+      let hasSchedule = false;
+      const scheduleContainer = document.createElement('div');
+      scheduleContainer.className = 'schedule-list';
+
+      for(const rawLine of lines){
+        const line = rawLine.trim();
+        if(!line) continue;
+        const m = line.match(/^\s*(?:[-•]|\d+\.)\s*(\d{1,2}:\d{2})\s*(?:-|–|to|~)\s*(\d{1,2}:\d{2})\s*(?:[:\-–])?\s*(.+)$/i);
+        if(m){
+          hasSchedule = true;
+          const item = document.createElement('div');
+          item.className = 'schedule-item';
+          const time = document.createElement('span');
+          time.className = 'schedule-time';
+          time.textContent = `${m[1]} – ${m[2]}`;
+          const title = document.createElement('span');
+          title.className = 'schedule-title';
+          title.textContent = m[3];
+          item.appendChild(time);
+          item.appendChild(title);
+          scheduleContainer.appendChild(item);
+          continue;
+        }
+        // fallback paragraph for non-schedule line
+        const p = document.createElement('p');
+        p.style.margin = '0 0 6px';
+        p.innerHTML = escapeHTML(line).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        container.appendChild(p);
+      }
+
+      targetEl.className = targetEl.className.replace(' streaming','');
+      targetEl.innerHTML = '';
+      if(container.childNodes.length){ targetEl.appendChild(container); }
+      if(hasSchedule){ targetEl.appendChild(scheduleContainer); }
+      return hasSchedule;
+    }
+
+    function showApplyPlan(){
+      applySection.style.display = 'block';
+      // Set default date to today
+      const today = new Date().toISOString().split('T')[0];
+      planDate.value = today;
+    }
+
+    function hideApplyPlan(){
+      applySection.style.display = 'none';
+    }
+
+    async function send(message = null){
+      const text = message || (input.value||'').trim();
+      if(!text) return;
+      
+      addMsg(text, 'user');
+      if(!message) input.value='';
+      
+      const waitEl = addMsg('Thinking…', 'assistant', true);
+      
+      try{
+        const resp = await fetch('/calendar/chat/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+          body: JSON.stringify({ message: text })
+        });
+        
+        if(!resp.ok){ throw new Error('Failed to get reply'); }
+        const data = await resp.json();
+        
+        // Simulate streaming effect
+        const reply = data.reply || 'No reply received.';
+        const words = reply.split(' ');
+        let currentText = '';
+        
+        for(let i = 0; i < words.length; i++){
+          currentText += (i > 0 ? ' ' : '') + words[i];
+          updateMsg(waitEl, currentText, i < words.length - 1);
+          await new Promise(resolve => setTimeout(resolve, 50)); // 50ms delay between words
+        }
+        
+        // Format the final assistant message and show apply section if it looks like a schedule
+        const looksScheduled = formatAssistantReply(waitEl, reply);
+        if(looksScheduled){ setTimeout(showApplyPlan, 500); }
+        
+      } catch(e){
+        updateMsg(waitEl, 'Error: ' + (e && e.message ? e.message : 'Unable to contact assistant.'));
+        waitEl.className = waitEl.className.replace('assistant', 'error');
+      }
+    }
+
+    async function applyPlan(){
+      if(!lastAssistantMessage || !planDate.value) return;
+      
+      const planText = lastAssistantMessage.textContent;
+      applyBtn.textContent = 'Creating...';
+      applyBtn.disabled = true;
+      
+      try{
+        const resp = await fetch('/scheduler/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+          body: JSON.stringify({ 
+            date: planDate.value,
+            ai_plan: planText
+          })
+        });
+        
+        if(resp.ok){
+          addMsg('✅ Schedule created successfully for ' + planDate.value, 'assistant');
+          hideApplyPlan();
+        } else {
+          addMsg('❌ Failed to create schedule. Please try again.', 'error');
+        }
+      } catch(e){
+        addMsg('❌ Error creating schedule: ' + e.message, 'error');
+      } finally {
+        applyBtn.textContent = 'Create Schedule';
+        applyBtn.disabled = false;
+      }
+    }
+
+    // Event listeners
+    sendBtn.addEventListener('click', () => send());
+    input.addEventListener('keydown', (e) => { if(e.key==='Enter'){ e.preventDefault(); send(); } });
+    
+    // Quick action buttons
+    document.querySelectorAll('.quick-action').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const prompt = btn.getAttribute('data-prompt');
+        send(prompt);
+      });
+    });
+    
+    // Apply plan buttons
+    applyBtn.addEventListener('click', applyPlan);
+    cancelBtn.addEventListener('click', hideApplyPlan);
+    
+  })();
+  </script>
+</section>
+
+
+{% endblock %}

@@ -1,0 +1,190 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="glass panel" style="margin-bottom:12px;">
+  <h2 style="margin:0">Kash AI — Day Planner</h2>
+  <p style="margin:6px 0 0;">Calendar on the left. Today’s schedule on the right.</p>
+  <p style="margin:6px 0 0; color:#667;">Focus window: {{ day_start|default:'09:00' }}–{{ day_end|default:'18:00' }}</p>
+  <input type="hidden" id="todayDate" value="{{ today|date:'Y-m-d' }}" />
+</div>
+
+<div class="scheduler-grid" style="display:grid; grid-template-columns: 1fr 1.3fr; gap:16px; align-items:start;">
+  <section class="glass panel">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <h3 style="margin:0">Calendar</h3>
+        <small id="monthLabel" style="color:#667;"></small>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" id="prevMonth">Prev</button>
+        <button class="btn" id="nextMonth">Next</button>
+      </div>
+    </div>
+    <div id="calendarGrid" class="calendar" style="margin-top:10px;
+      display:grid; grid-template-columns: repeat(7, 1fr); gap:6px;">
+      <!-- Calendar cells injected by JS -->
+    </div>
+    <style>
+      .cal-cell { padding:10px; border-radius:8px; text-align:center; cursor:pointer; position:relative; }
+      .cal-weekday { font-weight:600; color:#445; background:transparent; cursor:default; }
+      .cal-past { color:#999; background:#f1f1f3; }
+      .cal-today { outline:2px solid #3b82f6; background:#e8f0ff; color:#1f3b7d; }
+      .cal-other { color:#889; background:#f6f7fa; }
+      .cal-selected { box-shadow:0 0 0 2px #555 inset; }
+    </style>
+  </section>
+
+  <section class="glass panel">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <h3 style="margin:0">Schedule for <span id="selectedDateLabel">{{ today|date:'Y-m-d' }}</span></h3>
+      <small style="color:#667;">Window: {{ day_start|default:'09:00' }}–{{ day_end|default:'18:00' }}</small>
+    </div>
+    <div id="scheduleLoading" style="margin-top:8px; display:none; align-items:center; color:#456;">
+      <span class="spinner" aria-hidden="true"></span>
+      <span>Generating schedule…</span>
+    </div>
+    <table class="table" id="scheduleTable" style="margin-top:8px;">
+      <thead>
+        <tr><th>Time</th><th>Task</th></tr>
+      </thead>
+      <tbody>
+        {% if items and items|length %}
+          {% for it in items %}
+          <tr><td>{{ it.start }}–{{ it.end }}</td><td>{{ it.title }}</td></tr>
+          {% endfor %}
+        {% else %}
+          {% if has_tasks_for_date %}
+            <tr><td colspan="2">No scheduled tasks for today.</td></tr>
+          {% elif has_tasks_any %}
+            <tr><td colspan="2">No scheduled tasks for today.</td></tr>
+          {% else %}
+            <tr><td colspan="2">No tasks created.</td></tr>
+          {% endif %}
+        {% endif %}
+      </tbody>
+    </table>
+    <div id="eventsOverlay" style="margin-top:12px;">
+      <h4 style="margin:0 0 6px;">Calendar Events</h4>
+      <ul id="eventsList" class="bullets" style="margin:0;"></ul>
+    </div>
+    <div id="upcomingBox" style="margin-top:12px;">
+      <h4 style="margin:0 0 6px;">Upcoming Tasks</h4>
+      <ul id="upcomingList" class="bullets" style="margin:0;"></ul>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+  const todayStr = document.getElementById('todayDate')?.value || new Date().toISOString().slice(0,10);
+  const today = new Date(todayStr + 'T00:00:00');
+  let current = new Date(today.getFullYear(), today.getMonth(), 1);
+  let selected = new Date(today);
+
+  const grid = document.getElementById('calendarGrid');
+  const label = document.getElementById('monthLabel');
+  const prevBtn = document.getElementById('prevMonth');
+  const nextBtn = document.getElementById('nextMonth');
+  const selectedLabel = document.getElementById('selectedDateLabel');
+  const eventsList = document.getElementById('eventsList');
+  const upcomingList = document.getElementById('upcomingList');
+  const loadingEl = document.getElementById('scheduleLoading');
+
+  function fmtDate(d){ const m = String(d.getMonth()+1).padStart(2,'0'); const dy = String(d.getDate()).padStart(2,'0'); return `${d.getFullYear()}-${m}-${dy}`; }
+  function isSameDate(a,b){ return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+  function startOfDay(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+  function renderMonth(){
+    // Header
+    label.textContent = current.toLocaleString(undefined, { month: 'long', year:'numeric' });
+    grid.innerHTML='';
+    const weekdays = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    weekdays.forEach(w => { const c = document.createElement('div'); c.className='cal-cell cal-weekday'; c.textContent=w; grid.appendChild(c); });
+    const firstDayIdx = new Date(current.getFullYear(), current.getMonth(), 1).getDay();
+    const daysInMonth = new Date(current.getFullYear(), current.getMonth()+1, 0).getDate();
+    // Leading blanks
+    for(let i=0;i<firstDayIdx;i++){ const b=document.createElement('div'); b.className='cal-cell cal-other'; b.textContent=''; grid.appendChild(b); }
+    for(let d=1; d<=daysInMonth; d++){
+      const cellDate = new Date(current.getFullYear(), current.getMonth(), d);
+      const el = document.createElement('div'); el.className='cal-cell'; el.textContent=String(d);
+      const isPast = startOfDay(cellDate) < startOfDay(today);
+      const isToday = isSameDate(cellDate, today);
+      if (isToday) el.classList.add('cal-today');
+      if (isPast) el.classList.add('cal-past');
+      if (!isSameDate(cellDate, today) && cellDate.getMonth() !== today.getMonth()) el.classList.add('cal-other');
+      if (isSameDate(cellDate, selected)) el.classList.add('cal-selected');
+      el.addEventListener('click', () => { selected = cellDate; selectedLabel.textContent = fmtDate(selected); loadSchedule(fmtDate(selected)); renderMonth(); });
+      grid.appendChild(el);
+    }
+  }
+
+  async function loadSchedule(dateStr){
+    if (loadingEl) loadingEl.style.display='inline-flex';
+    const tableEl = document.getElementById('scheduleTable');
+    tableEl.setAttribute('aria-busy','true');
+    const tbody = document.querySelector('#scheduleTable tbody');
+    try{
+      const resp = await fetch(`/scheduler/day/?date=${encodeURIComponent(dateStr)}`);
+      tbody.innerHTML = '';
+      if (!resp.ok){
+        const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan=2; td.textContent='Failed to load schedule.'; tr.appendChild(td); tbody.appendChild(tr);
+        return;
+      }
+      const data = await resp.json();
+      if (data.items && data.items.length){
+        data.items.forEach(it => {
+          const tr = document.createElement('tr');
+          const tdTime = document.createElement('td'); tdTime.textContent = `${it.start}–${it.end}`;
+          const tdTitle = document.createElement('td'); tdTitle.textContent = it.title;
+          tr.appendChild(tdTime); tr.appendChild(tdTitle);
+          tbody.appendChild(tr);
+        });
+      } else {
+        const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan=2;
+        const hasAny = data.has_tasks_any === true;
+        const hasForDate = data.has_tasks_for_date === true;
+        td.textContent = (!hasAny) ? 'No tasks created.' : 'No scheduled tasks for this day.';
+        tr.appendChild(td); tbody.appendChild(tr);
+      }
+      // Events overlay
+      eventsList.innerHTML = '';
+      if (data.events && data.events.length){
+        data.events.forEach(ev => {
+          const li = document.createElement('li');
+          li.textContent = `${ev.start}–${ev.end} • ${ev.title}`;
+          eventsList.appendChild(li);
+        });
+      } else {
+        const li = document.createElement('li'); li.textContent = 'No calendar events.'; eventsList.appendChild(li);
+      }
+      // Upcoming tasks with "Starts later" badges
+      upcomingList.innerHTML = '';
+      if (data.upcoming && data.upcoming.length){
+        data.upcoming.forEach(u => {
+          const li = document.createElement('li');
+          const badge = document.createElement('span'); badge.className='badge medium'; badge.style.marginLeft='6px'; badge.textContent='Starts later';
+          li.textContent = `${u.begin_date} • ${u.title}`;
+          li.appendChild(badge);
+          upcomingList.appendChild(li);
+        });
+      } else {
+        const li = document.createElement('li'); li.textContent = 'No upcoming tasks starting after this date.'; upcomingList.appendChild(li);
+      }
+    } catch(e){
+      tbody.innerHTML = '';
+      const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan=2; td.textContent='Failed to load schedule.'; tr.appendChild(td); tbody.appendChild(tr);
+    } finally {
+      if (loadingEl) loadingEl.style.display='none';
+      tableEl.removeAttribute('aria-busy');
+    }
+  }
+
+  prevBtn.addEventListener('click', () => { current = new Date(current.getFullYear(), current.getMonth()-1, 1); renderMonth(); });
+  nextBtn.addEventListener('click', () => { current = new Date(current.getFullYear(), current.getMonth()+1, 1); renderMonth(); });
+
+  // Initial render
+  renderMonth();
+  selectedLabel.textContent = fmtDate(selected);
+  // Load initial day data
+  loadSchedule(fmtDate(selected));
+})();
+</script>
+{% endblock %}

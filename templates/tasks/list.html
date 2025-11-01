@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="glass panel">
+  <h2 style="margin-top:0">Your Tasks</h2>
+  <p class="actions"><a class="btn btn-primary" href="/tasks/create/">Create Task</a></p>
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Done</th>
+        <th>Title</th>
+        <th>Priority</th>
+        <th>Energy</th>
+        <th>Type</th>
+        <th>Time of day</th>
+        <th>Daily time</th>
+        <th>Begin date</th>
+        <th>Deadline</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in tasks %}
+      <tr>
+        <td>
+          <a href="/tasks/{{ t.id }}/toggle/" class="toggle-check {% if t.completed %}done{% endif %}" title="{% if t.completed %}Mark as not done{% else %}Mark as done{% endif %}">
+            {% if t.completed %}✓{% else %}○{% endif %}
+          </a>
+        </td>
+        <td>{{ t.title }}</td>
+        <td>
+          {% if t.priority == 'High' %}
+            <span class="badge high">High</span>
+          {% elif t.priority == 'Medium' %}
+            <span class="badge medium">Medium</span>
+          {% else %}
+            <span class="badge low">Low</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if t.energy_level == 'High' %}
+            <span class="badge high">High</span>
+          {% elif t.energy_level == 'Normal' %}
+            <span class="badge medium">Normal</span>
+          {% else %}
+            <span class="badge low">Low</span>
+          {% endif %}
+        </td>
+        <td>{{ t.task_type|default:'General' }}</td>
+        <td>{{ t.time_of_day_pref|default:'Any' }}</td>
+        <td>{{ t.daily_time_minutes|default:0 }}m</td>
+        <td>
+          {% if t.begin_date %}
+            {{ t.begin_date|date:"Y-m-d" }}
+            {% if t.begin_date > today %}
+              <span class="badge" style="margin-left:6px;">Starts later</span>
+            {% endif %}
+          {% endif %}
+        </td>
+        <td>{% if t.deadline %}{{ t.deadline|date:"Y-m-d H:i" }}{% endif %}</td>
+        <td>
+          <div class="actions">
+            <a href="/tasks/{{ t.id }}/edit/" class="btn">Edit</a>
+            <a href="/tasks/{{ t.id }}/delete/" class="btn btn-danger">Delete</a>
+          </div>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="10">No tasks yet. Create your first task!</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

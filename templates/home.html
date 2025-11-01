@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="glass panel hero">
+  <div>
+    <h1 class="hero-title">AI-powered To‑Do & Schedule Assistant</h1>
+    <p>Manage tasks efficiently with smart scheduling, calendar sync, and analytics.</p>
+    <div style="margin-top:16px; display:flex; gap:10px;">
+      <a class="cta" href="/tasks/">Add a task</a>
+      <a class="cta" href="/scheduler/">Generate schedule</a>
+    </div>
+  </div>
+  <div class="glass panel">
+    <h3>Project Overview</h3>
+    <ul class="bullets">
+      <li>Add tasks with priority, duration, deadline, energy level.</li>
+      <li>Integrate calendars and fixed events to avoid conflicts.</li>
+      <li>AI scheduler optimizes daily/weekly timelines to preferences.</li>
+      <li>Review, edit, or regenerate schedules flexibly.</li>
+      <li>Notifications, analytics, and privacy controls.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="glass panel overview">
+  <h2 style="margin:0 0 12px;">Capabilities</h2>
+  <div class="features-grid">
+    <div>
+      <h3>Core features</h3>
+      <ul class="bullets">
+        <li>Task management: add, edit, delete with rich metadata.</li>
+        <li>Calendar & fixed events: sync or define custom constraints.</li>
+        <li>AI scheduler: Balanced, Deep‑work, Quick‑win modes.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Controls & insights</h3>
+      <ul class="bullets">
+        <li>Manual adjustments with drag‑and‑drop.</li>
+        <li>Notifications for starts, deadlines, and rescheduling.</li>
+        <li>Analytics on completion, accuracy, and focus time.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+{% endblock %}

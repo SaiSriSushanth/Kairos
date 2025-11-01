@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+{% block content %}
+<form method="post" enctype="multipart/form-data" class="glass panel">
+  {% csrf_token %}
+  <h2 style="margin-top:0">Import ICS</h2>
+  <div class="form-grid">
+    <div style="grid-column: 1 / -1;">
+      <label class="label">ICS file</label>
+      <input class="input" type="file" name="ics" accept="text/calendar,.ics" />
+    </div>
+  </div>
+  <div class="actions" style="margin-top:12px;">
+    <button class="btn btn-primary" type="submit">Import</button>
+    <a class="btn" href="/calendar/">Back to calendar</a>
+  </div>
+</form>
+{% endblock %}

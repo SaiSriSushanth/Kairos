@@ -1,0 +1,163 @@
+{% extends 'base.html' %}
+{% block content %}
+<form method="post" class="glass panel">
+  {% csrf_token %}
+  <h2 style="margin-top:0">{% if task %}Edit Task{% else %}Create a New Task{% endif %}</h2>
+  <div class="form-grid">
+    <div>
+      <label class="label">Title</label>
+      <input class="input" name="title" required value="{{ task.title|default:'' }}" />
+    </div>
+    <div>
+      <label class="label">Priority</label>
+      <select class="select" name="priority">
+        <option {% if task.priority == 'Low' %}selected{% endif %}>Low</option>
+        <option {% if task.priority|default:'Medium' == 'Medium' %}selected{% endif %}>Medium</option>
+        <option {% if task.priority == 'High' %}selected{% endif %}>High</option>
+      </select>
+    </div>
+    <div>
+      <!-- Duration removed; daily_time_minutes is used for scheduling -->
+      
+    </div>
+    <div>
+      <label class="label">Energy Level</label>
+      <select class="select" name="energy">
+        <option {% if task.energy_level == 'Low' %}selected{% endif %}>Low</option>
+        <option {% if task.energy_level|default:'Normal' == 'Normal' %}selected{% endif %}>Normal</option>
+        <option {% if task.energy_level == 'High' %}selected{% endif %}>High</option>
+      </select>
+    </div>
+    <div>
+      <label class="label">Daily time (minutes)</label>
+      <input class="input" name="daily_time" type="number" value="{{ task.daily_time_minutes|default:'0' }}" />
+    </div>
+    <div>
+      <label class="label">Time of day preference</label>
+      <select class="select" name="time_pref">
+        <option {% if task.time_of_day_pref|default:'Any' == 'Any' %}selected{% endif %}>Any</option>
+        <option {% if task.time_of_day_pref == 'Morning' %}selected{% endif %}>Morning</option>
+        <option {% if task.time_of_day_pref == 'Noon' %}selected{% endif %}>Noon</option>
+        <option {% if task.time_of_day_pref == 'Afternoon' %}selected{% endif %}>Afternoon</option>
+        <option {% if task.time_of_day_pref == 'Evening' %}selected{% endif %}>Evening</option>
+        <option {% if task.time_of_day_pref == 'Night' %}selected{% endif %}>Night</option>
+      </select>
+    </div>
+    <div>
+      <label class="label">Task type</label>
+      <select class="select" name="task_type">
+        <option {% if task.task_type|default:'General' == 'General' %}selected{% endif %}>General</option>
+        <option {% if task.task_type == 'Exam' %}selected{% endif %}>Exam</option>
+        <option {% if task.task_type == 'Project' %}selected{% endif %}>Project</option>
+        <option {% if task.task_type == 'Chores' %}selected{% endif %}>Chores</option>
+        <option {% if task.task_type == 'Study' %}selected{% endif %}>Study</option>
+        <option {% if task.task_type == 'Workout' %}selected{% endif %}>Workout</option>
+        <option {% if task.task_type == 'Meeting' %}selected{% endif %}>Meeting</option>
+        <option {% if task.task_type == 'Other' %}selected{% endif %}>Other</option>
+      </select>
+    </div>
+    <div style="grid-column: 1 / -1;">
+      <label class="label">Begin date</label>
+      <input class="input" name="begin_date" type="date" value="{{ task.begin_date|date:'Y-m-d' }}" />
+    </div>
+    <div style="grid-column: 1 / -1;">
+      <label class="label">Deadline</label>
+      <input class="input" name="deadline" type="datetime-local" value="{{ task.deadline|date:'Y-m-d\TH:i' }}" />
+    </div>
+  </div>
+  <div id="plannerWarning" style="margin-top:8px; padding:8px; border-radius:6px; background:rgba(255,200,0,.15); color:#5a3; display:none;"></div>
+  <div class="actions" style="margin-top:12px;">
+    <button class="btn btn-primary" type="submit">Save</button>
+    <a class="btn" href="/tasks/">Back to list</a>
+  </div>
+  <script>
+    (function(){
+      const data = {
+        dayBudget: {{ planner.day_budget|default:540 }},
+        totalUsed: {{ planner.total_used|default:0 }},
+        prefTotals: {
+          'Any': {{ planner.pref_totals.Any|default:0 }},
+          'Morning': {{ planner.pref_totals.Morning|default:0 }},
+          'Noon': {{ planner.pref_totals.Noon|default:0 }},
+          'Afternoon': {{ planner.pref_totals.Afternoon|default:0 }},
+          'Evening': {{ planner.pref_totals.Evening|default:0 }},
+          'Night': {{ planner.pref_totals.Night|default:0 }},
+        },
+        prefBudgets: {
+          'Any': {{ planner.pref_budgets.Any|default:540 }},
+          'Morning': {{ planner.pref_budgets.Morning|default:180 }},
+          'Noon': {{ planner.pref_budgets.Noon|default:60 }},
+          'Afternoon': {{ planner.pref_budgets.Afternoon|default:240 }},
+          'Evening': {{ planner.pref_budgets.Evening|default:120 }},
+          'Night': {{ planner.pref_budgets.Night|default:240 }},
+        }
+      };
+      const warnBox = document.getElementById('plannerWarning');
+      const dailyEl = document.querySelector('[name="daily_time"]');
+      const prefEl = document.querySelector('[name="time_pref"]');
+      const beginEl = document.querySelector('[name="begin_date"]');
+      function isActiveToday(){
+        try {
+          const val = beginEl ? beginEl.value : '';
+          if (!val) return true; // no begin date means start now
+          const today = new Date();
+          const bd = new Date(val + 'T00:00:00');
+          // active if begin_date <= today (compare by date only)
+          return bd <= new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        } catch(e){
+          return true;
+        }
+      }
+      function refresh(){
+        const daily = parseInt(dailyEl.value||'0',10);
+        const pref = prefEl.value||'Any';
+        const activeDaily = isActiveToday() ? daily : 0;
+        const newDayTotal = data.totalUsed + activeDaily;
+        const prefTotal = (data.prefTotals[pref]||0) + activeDaily;
+        const prefBudget = data.prefBudgets[pref]||data.prefBudgets['Any'];
+        let msgs = [];
+        if (newDayTotal > data.dayBudget){
+          msgs.push(`Total planned per day exceeds available time (${newDayTotal}m / ${data.dayBudget}m).`);
+        }
+        if (prefTotal > prefBudget){
+          msgs.push(`Too much planned for ${pref} (${prefTotal}m / ${prefBudget}m).`);
+        }
+        // Add helpful note for future-start tasks
+        if (!isActiveToday() && daily > 0){
+          try {
+            const today = new Date();
+            const bd = new Date((beginEl.value||'') + 'T00:00:00');
+            const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            const diffMs = bd.getTime() - startOfToday.getTime();
+            const days = Math.max(1, Math.round(diffMs / (1000*60*60*24)));
+            msgs.push(`Starts in ${days} day${days>1?'s':''}; not counted until begin date.`);
+          } catch(e) {
+            msgs.push(`Starts in the future; not counted until begin date.`);
+          }
+        }
+        if (msgs.length){
+          warnBox.style.display = 'block';
+          warnBox.style.background = 'rgba(255,80,80,.15)';
+          warnBox.style.color = '#a33';
+          warnBox.textContent = msgs.join(' ');
+        } else {
+          warnBox.style.display = 'block';
+          warnBox.style.background = 'rgba(120,200,120,.15)';
+          warnBox.style.color = '#2a6';
+          let msg = `Healthy load: Day ${newDayTotal}m / ${data.dayBudget}m; ${pref} ${prefTotal}m / ${prefBudget}m.`;
+          if (!isActiveToday() && daily > 0){
+            msg += ' Starts later; not counted until begin date.';
+          }
+          warnBox.textContent = msg;
+        }
+      }
+      if (dailyEl && prefEl){
+        dailyEl.addEventListener('input', refresh);
+        prefEl.addEventListener('change', refresh);
+        if (beginEl) beginEl.addEventListener('change', refresh);
+        refresh();
+      }
+    })();
+  </script>
+</form>
+{% endblock %}

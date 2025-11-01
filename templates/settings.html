@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% block content %}
+<form method="post" class="glass panel">
+  {% csrf_token %}
+  <h2 style="margin-top:0">Preferences [work in progress, DO NOT TOUCH!]</h2>
+  <div class="form-grid">
+    <div>
+      <label class="label">Focus window start (24-hour HH:MM)</label>
+      <input class="input" type="text" name="focus_start" inputmode="numeric" placeholder="HH:MM (e.g., 09:00)" pattern="^([01]\d|2[0-3]):[0-5]\d$" value="{{ prefs.focus_window_start|default:'' }}" />
+    </div>
+    <div>
+      <label class="label">Focus window end (24-hour HH:MM)</label>
+      <input class="input" type="text" name="focus_end" inputmode="numeric" placeholder="HH:MM (e.g., 18:00)" pattern="^([01]\d|2[0-3]):[0-5]\d$" value="{{ prefs.focus_window_end|default:'' }}" />
+    </div>
+    <div>
+      <label class="label">Break cadence (minutes)</label>
+      <input class="input" type="number" name="break_cadence" value="{{ prefs.break_cadence_minutes }}" />
+    </div>
+    <div>
+      <label class="label">Working days (comma-separated)</label>
+      <input class="input" name="working_days" value="{{ prefs.working_days }}" />
+    </div>
+  </div>
+  <div class="actions" style="margin-top:12px;">
+    <button class="btn btn-primary" type="submit">Save</button>
+    <a class="btn" href="/">Back</a>
+  </div>
+</form>
+<div class="glass panel" style="margin-top:12px;">
+  <small style="color:#667;">Tip: Enter times in 24-hour format HH:MM. Examples: 09:00, 13:30, 18:45.</small>
+</div>
+{% endblock %}

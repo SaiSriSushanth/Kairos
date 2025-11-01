@@ -1,0 +1,175 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="glass panel">
+  <h2 style="margin-top:0">Analytics</h2>
+  <div class="kpis">
+    <div class="kpi">
+      <h4>Total tasks</h4>
+      <div class="value">{{ total_tasks }}</div>
+    </div>
+    <div class="kpi">
+      <h4>Completed tasks</h4>
+      <div class="value">{{ completed_tasks }}</div>
+    </div>
+    <div class="kpi">
+      <h4>Total minutes scheduled</h4>
+      <div class="value">{{ total_minutes }}</div>
+    </div>
+  </div>
+  {% if latest_schedule %}
+    <p class="actions" style="margin-top:12px;"><a class="btn btn-primary" href="/schedule/{{ latest_schedule.id }}/export.ics">Export latest schedule (ICS)</a></p>
+  {% endif %}
+</section>
+
+<div class="charts-grid" style="margin-top:12px;">
+  <section class="glass panel">
+    <div class="chart-header">
+      <h3 style="margin-top:0">Task Completion</h3>
+    </div>
+    <canvas id="completionChart" class="chart-canvas"></canvas>
+  </section>
+
+  <section class="glass panel">
+    <div class="chart-header">
+      <h3 style="margin-top:0">Tasks by Priority</h3>
+    </div>
+    <canvas id="priorityChart" class="chart-canvas"></canvas>
+  </section>
+
+  <section class="glass panel">
+    <div class="chart-header">
+      <h3 style="margin-top:0">Tasks by Energy Level</h3>
+    </div>
+    <canvas id="energyChart" class="chart-canvas"></canvas>
+  </section>
+
+  <section class="glass panel span-2">
+    <div class="chart-header">
+      <h3 style="margin-top:0">Scheduled Minutes per Day</h3>
+      <div class="actions">
+        <div class="segmented" data-chart="scheduleChart">
+          <button class="seg-btn active" type="button" data-range="7">7d</button>
+          <button class="seg-btn" type="button" data-range="14">14d</button>
+          <button class="seg-btn" type="button" data-range="30">30d</button>
+        </div>
+      </div>
+    </div>
+    <canvas id="scheduleChart" class="chart-canvas tall"></canvas>
+  </section>
+
+  <section class="glass panel span-2">
+    <div class="chart-header">
+      <h3 style="margin-top:0">Tasks Created per Day</h3>
+      <div class="actions">
+        <div class="segmented" data-chart="createdChart">
+          <button class="seg-btn active" type="button" data-range="7">7d</button>
+          <button class="seg-btn" type="button" data-range="14">14d</button>
+          <button class="seg-btn" type="button" data-range="30">30d</button>
+        </div>
+      </div>
+    </div>
+    <canvas id="createdChart" class="chart-canvas tall"></canvas>
+  </section>
+
+  <section class="glass panel">
+    <div class="chart-header">
+      <h3 style="margin-top:0">Task Type Distribution</h3>
+    </div>
+    <canvas id="typeChart" class="chart-canvas"></canvas>
+  </section>
+
+  <section class="glass panel">
+    <div class="chart-header">
+      <h3 style="margin-top:0">Time Preference (Incomplete)</h3>
+    </div>
+    <canvas id="timePrefChart" class="chart-canvas"></canvas>
+  </section>
+
+  <section class="glass panel">
+    <div class="chart-header">
+      <h3 style="margin-top:0">Schedule Mode Distribution</h3>
+    </div>
+    <canvas id="modeChart" class="chart-canvas"></canvas>
+  </section>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  (function(){
+    const completionLabels = {{ completion_labels|safe }};
+    const completionData = {{ completion_data|safe }};
+    const priorityLabels = {{ priority_labels|safe }};
+    const priorityData = {{ priority_data|safe }};
+    const energyLabels = {{ energy_labels|safe }};
+    const energyData = {{ energy_data|safe }};
+    const scheduleLabels = {{ schedule_labels|safe }};
+    const scheduleData = {{ schedule_data|safe }};
+    const createdLabels = {{ tasks_created_labels|safe }};
+    const createdData = {{ tasks_created_data|safe }};
+
+    const charts = {};
+
+    function mkChart(id, type, labels, data, label){
+      const ctx = document.getElementById(id);
+      if(!ctx) return;
+      const chart = new Chart(ctx, {
+        type,
+        data: {
+          labels,
+          datasets: [{
+            label,
+            data,
+            backgroundColor: ['#4caf50','#f44336','#2196f3','#ff9800','#9c27b0','#00bcd4'],
+            borderColor: '#222',
+            borderWidth: 1,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: type !== 'bar' } },
+          scales: type === 'bar' ? { y: { beginAtZero: true } } : {}
+        }
+      });
+      charts[id] = chart;
+      return chart;
+    }
+
+    mkChart('completionChart', 'doughnut', completionLabels, completionData, 'Tasks');
+    mkChart('priorityChart', 'line', priorityLabels, priorityData, 'Incomplete tasks');
+    mkChart('energyChart', 'line', energyLabels, energyData, 'Incomplete tasks');
+    mkChart('scheduleChart', 'line', scheduleLabels, scheduleData, 'Minutes scheduled');
+
+    // Additional analytics
+    mkChart('createdChart', 'line', {{ tasks_created_labels|safe }}, {{ tasks_created_data|safe }}, 'Tasks created');
+    mkChart('typeChart', 'bar', {{ task_type_labels|safe }}, {{ task_type_data|safe }}, 'Tasks');
+    mkChart('timePrefChart', 'bar', {{ time_pref_labels|safe }}, {{ time_pref_data|safe }}, 'Incomplete tasks');
+    mkChart('modeChart', 'bar', {{ schedule_mode_labels|safe }}, {{ schedule_mode_data|safe }}, 'Schedules');
+
+    // Range toggles for time-series charts
+    function applyRange(id, allLabels, allData, n){
+      const chart = charts[id];
+      if(!chart) return;
+      const count = Math.min(n, allLabels.length);
+      const start = allLabels.length - count;
+      chart.data.labels = allLabels.slice(start);
+      chart.data.datasets[0].data = allData.slice(start);
+      chart.update();
+    }
+
+    document.querySelectorAll('.segmented').forEach(seg => {
+      const chartId = seg.getAttribute('data-chart');
+      seg.addEventListener('click', (e) => {
+        const btn = e.target.closest('.seg-btn');
+        if(!btn) return;
+        seg.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const n = parseInt(btn.getAttribute('data-range'), 10);
+        if(chartId === 'scheduleChart') applyRange(chartId, scheduleLabels, scheduleData, n);
+        if(chartId === 'createdChart') applyRange(chartId, createdLabels, createdData, n);
+      });
+    });
+
+    // PNG download removed per request
+  })();
+</script>
+{% endblock %}

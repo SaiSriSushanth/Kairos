@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="auth-page">
+  <div class="glass auth-card">
+    <div class="auth-header">
+      <h2 class="auth-title">Welcome back</h2>
+      <p class="auth-subtitle">Sign in to continue</p>
+    </div>
+    <form method="post" action="{% url 'tasks:login' %}" class="auth-form">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div class="auth-error">{{ form.non_field_errors }}</div>
+      {% endif %}
+      <div class="input-row">
+        <label class="label">Username</label>
+        <input type="text" name="username" class="input" autocomplete="username" required />
+      </div>
+      <div class="input-row">
+        <label class="label">Password</label>
+        <input type="password" name="password" class="input" autocomplete="current-password" required />
+      </div>
+      <div class="actions" style="margin-top:8px;">
+        <button class="btn btn-primary btn-full" type="submit">Login</button>
+      </div>
+      <p class="auth-note">Don't have an account? <a href="{% url 'tasks:register' %}">Create one</a></p>
+    </form>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Todou AI</title>
+  <link rel="stylesheet" href="/static/css/styles.css" />
+</head>
+<body>
+  <div class="bg"></div>
+  <header class="glass nav">
+    <div class="brand">Kairos</div>
+    <nav>
+      <a href="/" class="nav-link">Overview</a>
+      <a href="/tasks/" class="nav-link">Tasks</a>
+      <a href="/scheduler/" class="nav-link">Kash AI Scheduler</a>
+      <a href="/calendar/" class="nav-link">Chat</a>
+      <a href="/analytics/" class="nav-link">Analytics</a>
+      <a href="/settings/" class="nav-link">Settings</a>
+      {% if user.is_authenticated %}
+        <span class="nav-link" style="opacity:.8;">Hi, {{ user.username }}</span>
+        <a href="{% url 'tasks:logout' %}" class="nav-link">Logout</a>
+      {% else %}
+        <a href="{% url 'tasks:login' %}" class="nav-link">Login</a>
+        <a href="{% url 'tasks:register' %}" class="nav-link">Register</a>
+      {% endif %}
+    </nav>
+  </header>
+
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="glass footer">
+    <nav class="footer-links">
+      <span>© 2025 Kairos AI</span>
+      <a href="/">Overview</a>
+      <a href="/tasks/">Tasks</a>
+      <a href="/scheduler/">Scheduler</a>
+      <a href="/calendar/">Calendar</a>
+      <a href="/analytics/">Analytics</a>
+      <a href="/settings/">Preferences</a>
+      <span style="opacity:.7">v0.1</span>
+    </nav>
+  </footer>
+</body>
+</html>

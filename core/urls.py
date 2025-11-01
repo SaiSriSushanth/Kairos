@@ -8,7 +8,8 @@ urlpatterns = [
     path('', HomeView.as_view(), name='home'),
     # Auth
     path('login/', auth_views.LoginView.as_view(template_name='auth/login.html'), name='login'),
-    path('logout/', auth_views.LogoutView.as_view(next_page='home'), name='logout'),
+    # Use namespaced route for logout redirect to avoid NoReverseMatch in production
+    path('logout/', auth_views.LogoutView.as_view(next_page='tasks:home'), name='logout'),
     path('register/', register, name='register'),
     path('tasks/', TaskListView.as_view(), name='list'),
     path('tasks/create/', create_task, name='create'),

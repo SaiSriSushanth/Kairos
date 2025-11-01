@@ -34,6 +34,14 @@
   </section>
 
   <section class="glass panel">
+    {% if recently_created_date %}
+    <div id="recentBanner" class="banner success" style="margin-bottom:10px; display:flex; align-items:center; gap:8px;">
+      <span class="badge success" aria-hidden="true">✓</span>
+      <span>Schedule created successfully for {{ recently_created_date }}</span>
+      <button class="btn" id="jumpRecent" style="margin-left:auto;">Jump to date</button>
+    </div>
+    <input type="hidden" id="recentlyCreatedDate" value="{{ recently_created_date }}" />
+    {% endif %}
     <div style="display:flex; justify-content:space-between; align-items:center;">
       <h3 style="margin:0">Schedule for <span id="selectedDateLabel">{{ today|date:'Y-m-d' }}</span></h3>
       <small style="color:#667;">Window: {{ day_start|default:'09:00' }}–{{ day_end|default:'18:00' }}</small>
@@ -79,6 +87,8 @@
   const today = new Date(todayStr + 'T00:00:00');
   let current = new Date(today.getFullYear(), today.getMonth(), 1);
   let selected = new Date(today);
+  const recentInput = document.getElementById('recentlyCreatedDate');
+  const recentDateStr = recentInput ? recentInput.value : '';
 
   const grid = document.getElementById('calendarGrid');
   const label = document.getElementById('monthLabel');
@@ -179,12 +189,32 @@
 
   prevBtn.addEventListener('click', () => { current = new Date(current.getFullYear(), current.getMonth()-1, 1); renderMonth(); });
   nextBtn.addEventListener('click', () => { current = new Date(current.getFullYear(), current.getMonth()+1, 1); renderMonth(); });
+  const jumpBtn = document.getElementById('jumpRecent');
+  if (jumpBtn && recentDateStr){
+    jumpBtn.addEventListener('click', () => {
+      selected = new Date(recentDateStr + 'T00:00:00');
+      selectedLabel.textContent = recentDateStr;
+      // Set month view to the recent date
+      current = new Date(selected.getFullYear(), selected.getMonth(), 1);
+      renderMonth();
+      loadSchedule(recentDateStr);
+      const banner = document.getElementById('recentBanner'); if (banner) banner.style.display='none';
+    });
+  }
 
   // Initial render
   renderMonth();
-  selectedLabel.textContent = fmtDate(selected);
-  // Load initial day data
-  loadSchedule(fmtDate(selected));
+  if (recentDateStr){
+    selected = new Date(recentDateStr + 'T00:00:00');
+    selectedLabel.textContent = recentDateStr;
+    current = new Date(selected.getFullYear(), selected.getMonth(), 1);
+    renderMonth();
+    loadSchedule(recentDateStr);
+  } else {
+    selectedLabel.textContent = fmtDate(selected);
+    // Load initial day data
+    loadSchedule(fmtDate(selected));
+  }
 })();
 </script>
 {% endblock %}

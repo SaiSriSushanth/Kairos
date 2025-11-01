@@ -333,6 +333,78 @@ def _seq_schedule_items(tasks, day_start: str, day_end: str, for_date: date_cls 
 @login_required
 def scheduler(request):
     """Calendar-based scheduler page showing saved schedule for today."""
+    # Handle Apply Plan POST from calendar chat
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body.decode('utf-8'))
+        except Exception:
+            data = {}
+        date_str = (data.get('date') or '').strip()
+        plan_text = (data.get('ai_plan') or '').strip()
+        if not date_str or not plan_text:
+            return JsonResponse({'error': 'date and ai_plan required'}, status=400)
+        try:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except Exception:
+            return JsonResponse({'error': 'invalid date'}, status=400)
+
+        # Preferences for focus window
+        prefs = Preferences.objects.first()
+        def safe_str(s, default):
+            try:
+                t = datetime.strptime((s or default), '%H:%M').time()
+                return t.strftime('%H:%M')
+            except Exception:
+                return default
+        day_start = safe_str(getattr(prefs, 'focus_window_start', None), '09:00')
+        day_end = safe_str(getattr(prefs, 'focus_window_end', None), '18:00')
+
+        # Replace any existing schedule for target date
+        Schedule.objects.filter(day_date=target_date).delete()
+
+        # Create schedule and parse AI items
+        try:
+            start_t = datetime.strptime(day_start, '%H:%M').time()
+        except Exception:
+            start_t = datetime.strptime('09:00', '%H:%M').time()
+        try:
+            end_t = datetime.strptime(day_end, '%H:%M').time()
+        except Exception:
+            end_t = datetime.strptime('18:00', '%H:%M').time()
+        if end_t <= start_t:
+            start_t = datetime.strptime('09:00', '%H:%M').time()
+            end_t = datetime.strptime('18:00', '%H:%M').time()
+
+        schedule = Schedule.objects.create(
+            mode='Balanced',
+            day_start=start_t,
+            day_end=end_t,
+            plan_text=plan_text,
+            day_date=target_date,
+        )
+
+        items = _parse_ai_schedule(plan_text, target_date, day_start, day_end)
+        if items:
+            # Attempt to attach tasks by title for convenience
+            tasks = Task.objects.filter(completed=False)
+            _attach_tasks_by_title(items, list(tasks))
+            for s in items:
+                ScheduleItem.objects.create(
+                    schedule=schedule,
+                    task=s.get('task'),
+                    title=s['title'],
+                    start_time=s['start'],
+                    end_time=s['end'],
+                    position=s['position'],
+                )
+        # Remember recent creation to show confirmation on scheduler page
+        try:
+            request.session['recent_schedule_date'] = target_date.strftime('%Y-%m-%d')
+            request.session['recent_schedule_id'] = schedule.id
+        except Exception:
+            pass
+        return JsonResponse({'ok': True, 'schedule_id': schedule.id, 'date': target_date.strftime('%Y-%m-%d')})
+
     cleanup_expired_tasks()
     prefs = Preferences.objects.first()
     def safe_str(s, default):
@@ -360,6 +432,11 @@ def scheduler(request):
     if schedule:
         for it in schedule.items.all().order_by('position'):
             items.append({'title': it.title, 'start': it.start_time.strftime('%H:%M'), 'end': it.end_time.strftime('%H:%M')})
+    # Pull recent creation banner (once)
+    try:
+        recent_created_date = request.session.pop('recent_schedule_date', None)
+    except Exception:
+        recent_created_date = None
     return render(request, 'scheduler.html', {
         'day_start': day_start,
         'day_end': day_end,
@@ -367,6 +444,7 @@ def scheduler(request):
         'items': items,
         'has_tasks_for_date': has_tasks_for_today,
         'has_tasks_any': has_tasks_any,
+        'recently_created_date': recent_created_date,
     })
 
 
@@ -587,7 +665,8 @@ def _parse_ai_schedule(plan_text: str, target_date: date_cls, day_start: str, da
         pass
 
     # Fallback regex parsing from lines like "09:00-10:00 Task name"
-    pattern = re.compile(r"(?m)^\s*(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})\s*[|:-]?\s*(.+?)\s*$")
+    # Accept optional bullet markers and different separators
+    pattern = re.compile(r"(?m)^\s*(?:[-*•]\s*)?(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})\s*[|:\-–]?\s*(.+?)\s*$")
     pos = 0
     for m in re.finditer(pattern, plan_text or ''):
         st_s, en_s, title = m.group(1), m.group(2), m.group(3).strip()

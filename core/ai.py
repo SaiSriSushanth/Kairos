@@ -1,5 +1,6 @@
 from typing import Iterable, List
 from django.conf import settings
+import json
 
 def _format_task(t):
     dur = getattr(t, 'daily_time_minutes', 0) or getattr(t, 'duration_minutes', 30)
@@ -132,7 +133,25 @@ def generate_chat_reply(user_message: str, tasks: Iterable, schedules: Iterable,
             ],
             temperature=0.4,
         )
-        return resp.choices[0].message.content
+        text = resp.choices[0].message.content
+        # Always append a valid schedule block so Apply Plan can detect it
+        plan = generate_schedule(list(tasks), 'Balanced', day_start or '09:00', day_end or '18:00')
+        try:
+            data = json.loads(plan)
+            items = data.get('items') or []
+            lines = []
+            for it in items:
+                st = (it or {}).get('start')
+                en = (it or {}).get('end')
+                title = (it or {}).get('title') or ''
+                if st and en and title:
+                    lines.append(f"- {st}-{en} {title}")
+            if lines:
+                text = text + "\n\nPlan:\n" + "\n".join(lines)
+        except Exception:
+            # If JSON parse fails, keep original text
+            pass
+        return text
     except Exception:
         try:
             # Fallback legacy SDK
@@ -148,6 +167,22 @@ def generate_chat_reply(user_message: str, tasks: Iterable, schedules: Iterable,
                 ],
                 temperature=0.4,
             )
-            return resp['choices'][0]['message']['content']
+            text = resp['choices'][0]['message']['content']
+            plan = generate_schedule(list(tasks), 'Balanced', day_start or '09:00', day_end or '18:00')
+            try:
+                data = json.loads(plan)
+                items = data.get('items') or []
+                lines = []
+                for it in items:
+                    st = (it or {}).get('start')
+                    en = (it or {}).get('end')
+                    title = (it or {}).get('title') or ''
+                    if st and en and title:
+                        lines.append(f"- {st}-{en} {title}")
+                if lines:
+                    text = text + "\n\nPlan:\n" + "\n".join(lines)
+            except Exception:
+                pass
+            return text
         except Exception as e2:
             return f"Chat AI error: {e2}"

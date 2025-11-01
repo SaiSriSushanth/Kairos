@@ -175,7 +175,20 @@
     async function applyPlan(){
       if(!lastAssistantMessage || !planDate.value) return;
       
-      const planText = lastAssistantMessage.textContent;
+      // Prefer structured JSON extracted from formatted schedule items
+      const items = Array.from(lastAssistantMessage.querySelectorAll('.schedule-item')).map(el => {
+        const timeEl = el.querySelector('.schedule-time');
+        const titleEl = el.querySelector('.schedule-title');
+        const timeTxt = (timeEl ? timeEl.textContent : '').trim();
+        // Support en dash or hyphen
+        let parts = timeTxt.split('–');
+        if(parts.length !== 2){ parts = timeTxt.split('-'); }
+        const start = (parts[0]||'').trim();
+        const end = (parts[1]||'').trim();
+        const title = (titleEl ? titleEl.textContent : '').trim();
+        return { title, start, end };
+      }).filter(it => it.title && it.start && it.end);
+      const planPayload = (items && items.length) ? JSON.stringify({ items }) : (lastAssistantMessage.textContent||'');
       applyBtn.textContent = 'Creating...';
       applyBtn.disabled = true;
       
@@ -185,7 +198,7 @@
           headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
           body: JSON.stringify({ 
             date: planDate.value,
-            ai_plan: planText
+            ai_plan: planPayload
           })
         });
         
